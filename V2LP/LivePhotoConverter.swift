@@ -1,6 +1,5 @@
 import AVFoundation
 import UIKit
-import MobileCoreServices
 
 final class LivePhotoConverter {
 
@@ -42,7 +41,7 @@ final class LivePhotoConverter {
         startTime: Double,
         duration: Double,
         keyFrameTime: Double,
-        progress: @escaping (Double) -> Void
+        progress: @Sendable @escaping (Double) -> Void
     ) async throws -> ConversionResult {
         let assetIdentifier = UUID().uuidString
 
@@ -140,7 +139,7 @@ final class LivePhotoConverter {
         duration: Double,
         stillImageTimeOffset: Double,
         assetIdentifier: String,
-        progress: @escaping (Double) -> Void
+        progress: @Sendable @escaping (Double) -> Void
     ) async throws -> URL {
         let asset = AVURLAsset(url: videoURL)
         let outputURL = FileManager.default.temporaryDirectory
@@ -264,7 +263,6 @@ final class LivePhotoConverter {
 
         try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
             let group = DispatchGroup()
-            var encounteredError: Error?
 
             // Video
             group.enter()
@@ -313,12 +311,6 @@ final class LivePhotoConverter {
                 }
                 metadataInput.markAsFinished()
 
-                if let error = encounteredError {
-                    writer.cancelWriting()
-                    continuation.resume(throwing: error)
-                    return
-                }
-
                 writer.finishWriting {
                     if writer.status == .completed {
                         progress(1.0)
@@ -341,17 +333,19 @@ final class LivePhotoConverter {
 
     private static func makeContentIdentifierMetadataItem(assetIdentifier: String) -> AVMetadataItem {
         let item = AVMutableMetadataItem()
-        item.key = quickTimeMetadataKeyContentIdentifier as NSString
-        item.keySpace = AVMetadataKeySpace(rawValue: assetIdentifierSpace)
+        item.key = AVMetadataKey.quickTimeMetadataKeyContentIdentifier as NSString
+        item.keySpace = .quickTimeMetadata
         item.value = assetIdentifier as NSString
-        item.dataType = "com.apple.metadata.datatype.UTF-8"
+        item.dataType = kCMMetadataBaseDataType_UTF8 as String
         return item
     }
 
     private static func makeStillImageTimeMetadataInput() -> AVAssetWriterInput {
         let spec: [String: Any] = [
-            kCMMetadataFormatDescriptionKey_Namespace as String: quickTimeMetadataKeyStillImageTime,
-            kCMMetadataFormatDescriptionKey_DataType as String: "com.apple.metadata.datatype.int8"
+            kCMMetadataFormatDescriptionKey_Identifier as String:
+                "\(assetIdentifierSpace)/\(quickTimeMetadataKeyStillImageTime)",
+            kCMMetadataFormatDescriptionKey_DataType as String:
+                kCMMetadataBaseDataType_SInt8 as String
         ]
 
         var formatDesc: CMFormatDescription?
@@ -376,7 +370,7 @@ final class LivePhotoConverter {
         item.key = quickTimeMetadataKeyStillImageTime as NSString
         item.keySpace = AVMetadataKeySpace(rawValue: assetIdentifierSpace)
         item.value = 0 as NSNumber
-        item.dataType = "com.apple.metadata.datatype.int8"
+        item.dataType = kCMMetadataBaseDataType_SInt8 as String
         return item
     }
 }

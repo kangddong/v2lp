@@ -1,4 +1,5 @@
 import SwiftUI
+import AVFoundation
 import AVKit
 import PhotosUI
 
@@ -55,7 +56,7 @@ struct VideoEditorView: View {
                             .foregroundStyle(.secondary)
                         Slider(
                             value: $startTime,
-                            in: 0...max(videoDuration - clipDuration, 0),
+                            in: 0...max(videoDuration - clipDuration, 0.1),
                             step: 0.1
                         )
                         .onChange(of: startTime) {
@@ -71,7 +72,7 @@ struct VideoEditorView: View {
                             .foregroundStyle(.secondary)
                         Slider(
                             value: $clipDuration,
-                            in: 1...min(maxClipDuration, max(videoDuration - startTime, 1)),
+                            in: 1...max(min(maxClipDuration, videoDuration - startTime), 1),
                             step: 0.1
                         )
                     }
@@ -84,7 +85,7 @@ struct VideoEditorView: View {
                             .foregroundStyle(.secondary)
                         Slider(
                             value: $keyFrameOffset,
-                            in: 0...max(clipDuration - 0.1, 0),
+                            in: 0...max(clipDuration - 0.1, 0.1),
                             step: 0.1
                         )
                         .onChange(of: keyFrameOffset) {
@@ -267,6 +268,13 @@ struct VideoEditorView: View {
         player?.pause()
         player = nil
         try? FileManager.default.removeItem(at: videoURL)
+    }
+
+    private func formattedTime(_ seconds: Double) -> String {
+        let mins = Int(seconds) / 60
+        let secs = Int(seconds) % 60
+        let frac = Int((seconds - Double(Int(seconds))) * 10)
+        return String(format: "%d:%02d.%d", mins, secs, frac)
     }
 }
 

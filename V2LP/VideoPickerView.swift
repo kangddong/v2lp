@@ -1,5 +1,6 @@
 import SwiftUI
 import PhotosUI
+import UniformTypeIdentifiers
 
 struct VideoPickerView: UIViewControllerRepresentable {
     let onPick: (URL) -> Void

@@ -170,9 +170,10 @@ final class LivePhotoConverter {
         let videoReaderOutput = AVAssetReaderTrackOutput(
             track: sourceVideoTrack,
             outputSettings: [
-                kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA
+                kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange
             ]
         )
+        videoReaderOutput.alwaysCopiesSampleData = false
         reader.add(videoReaderOutput)
 
         let naturalSize = try await sourceVideoTrack.load(.naturalSize)
@@ -232,6 +233,11 @@ final class LivePhotoConverter {
         let metadataInput = makeStillImageTimeMetadataInput()
         writer.add(metadataInput)
 
+        // Metadata adaptor MUST be created before writer.startWriting()
+        let metadataAdapter = AVAssetWriterInputMetadataAdaptor(
+            assetWriterInput: metadataInput
+        )
+
         // Start reading/writing
         reader.startReading()
         writer.startWriting()
@@ -241,10 +247,6 @@ final class LivePhotoConverter {
         let stillImageTimeCMTime = CMTime(
             seconds: startTime + stillImageTimeOffset,
             preferredTimescale: 600
-        )
-
-        let metadataAdapter = AVAssetWriterInputMetadataAdaptor(
-            assetWriterInput: metadataInput
         )
 
         let stillImageTimeMetadataItem = makeStillImageTimeMetadataForAdaptor()
@@ -267,23 +269,25 @@ final class LivePhotoConverter {
             // Video
             group.enter()
             let videoQueue = DispatchQueue(label: "com.v2lp.video")
+            var videoDone = false
             videoWriterInput.requestMediaDataWhenReady(on: videoQueue) {
-                while videoWriterInput.isReadyForMoreMediaData {
-                    if let sampleBuffer = videoReaderOutput.copyNextSampleBuffer() {
-                        videoWriterInput.append(sampleBuffer)
-                        framesWritten += 1
-                        let p = min(framesWritten / max(totalFrames, 1), 1.0)
-                        DispatchQueue.main.async { progress(p * 0.8) }
+                while videoWriterInput.isReadyForMoreMediaData && !videoDone {
+                    autoreleasepool {
+                        if let sampleBuffer = videoReaderOutput.copyNextSampleBuffer() {
+                            videoWriterInput.append(sampleBuffer)
+                            framesWritten += 1
+                            let p = min(framesWritten / max(totalFrames, 1), 1.0)
+                            DispatchQueue.main.async { progress(p * 0.8) }
 
-                        // Write metadata at the appropriate time
-                        if !didWriteMetadata && metadataInput.isReadyForMoreMediaData {
-                            metadataAdapter.append(metadataGroup)
-                            didWriteMetadata = true
+                            if !didWriteMetadata && metadataInput.isReadyForMoreMediaData {
+                                metadataAdapter.append(metadataGroup)
+                                didWriteMetadata = true
+                            }
+                        } else {
+                            videoWriterInput.markAsFinished()
+                            videoDone = true
+                            group.leave()
                         }
-                    } else {
-                        videoWriterInput.markAsFinished()
-                        group.leave()
-                        return
                     }
                 }
             }
@@ -292,14 +296,17 @@ final class LivePhotoConverter {
             if let audioReaderOutput = audioReaderOutput, let audioWriterInput = audioWriterInput {
                 group.enter()
                 let audioQueue = DispatchQueue(label: "com.v2lp.audio")
+                var audioDone = false
                 audioWriterInput.requestMediaDataWhenReady(on: audioQueue) {
-                    while audioWriterInput.isReadyForMoreMediaData {
-                        if let sampleBuffer = audioReaderOutput.copyNextSampleBuffer() {
-                            audioWriterInput.append(sampleBuffer)
-                        } else {
-                            audioWriterInput.markAsFinished()
-                            group.leave()
-                            return
+                    while audioWriterInput.isReadyForMoreMediaData && !audioDone {
+                        autoreleasepool {
+                            if let sampleBuffer = audioReaderOutput.copyNextSampleBuffer() {
+                                audioWriterInput.append(sampleBuffer)
+                            } else {
+                                audioWriterInput.markAsFinished()
+                                audioDone = true
+                                group.leave()
+                            }
                         }
                     }
                 }
@@ -342,9 +349,9 @@ final class LivePhotoConverter {
 
     private static func makeStillImageTimeMetadataInput() -> AVAssetWriterInput {
         let spec: [String: Any] = [
-            kCMMetadataFormatDescriptionKey_Identifier as String:
+            kCMMetadataFormatDescriptionMetadataSpecificationKey_Identifier as String:
                 "\(assetIdentifierSpace)/\(quickTimeMetadataKeyStillImageTime)",
-            kCMMetadataFormatDescriptionKey_DataType as String:
+            kCMMetadataFormatDescriptionMetadataSpecificationKey_DataType as String:
                 kCMMetadataBaseDataType_SInt8 as String
         ]
 

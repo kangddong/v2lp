@@ -1,10 +1,30 @@
 import SwiftUI
 import PhotosUI
 
+private struct PickedVideo: Identifiable {
+    let id = UUID()
+    let url: URL
+}
+
 struct ContentView: View {
-    @State private var selectedVideoURL: URL?
+    var body: some View {
+        TabView {
+            ConverterView()
+                .tabItem {
+                    Label("변환", systemImage: "livephoto")
+                }
+
+            DemoView()
+                .tabItem {
+                    Label("분석", systemImage: "doc.text.magnifyingglass")
+                }
+        }
+    }
+}
+
+struct ConverterView: View {
+    @State private var pickedVideo: PickedVideo?
     @State private var showVideoPicker = false
-    @State private var showEditor = false
 
     var body: some View {
         NavigationStack {
@@ -42,16 +62,13 @@ struct ContentView: View {
             .navigationTitle("V2LP")
             .sheet(isPresented: $showVideoPicker) {
                 VideoPickerView { url in
-                    selectedVideoURL = url
-                    showEditor = true
+                    showVideoPicker = false
+                    pickedVideo = PickedVideo(url: url)
                 }
             }
-            .fullScreenCover(isPresented: $showEditor) {
-                if let url = selectedVideoURL {
-                    VideoEditorView(videoURL: url) {
-                        showEditor = false
-                        selectedVideoURL = nil
-                    }
+            .fullScreenCover(item: $pickedVideo) { item in
+                VideoEditorView(videoURL: item.url) {
+                    pickedVideo = nil
                 }
             }
         }

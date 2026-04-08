@@ -28,14 +28,13 @@ struct VideoPickerView: UIViewControllerRepresentable {
         }
 
         func picker(_ picker: PHPickerViewController, didFinishPicking results: [PHPickerResult]) {
-            picker.dismiss(animated: true)
-
             guard let result = results.first else { return }
             let provider = result.itemProvider
 
             guard provider.hasItemConformingToTypeIdentifier(UTType.movie.identifier) else { return }
 
-            provider.loadFileRepresentation(forTypeIdentifier: UTType.movie.identifier) { [weak self] url, error in
+            let onPick = self.onPick
+            provider.loadFileRepresentation(forTypeIdentifier: UTType.movie.identifier) { url, error in
                 guard let url = url else { return }
 
                 let tempDir = FileManager.default.temporaryDirectory
@@ -44,7 +43,7 @@ struct VideoPickerView: UIViewControllerRepresentable {
                 try? FileManager.default.copyItem(at: url, to: destURL)
 
                 DispatchQueue.main.async {
-                    self?.onPick(destURL)
+                    onPick(destURL)
                 }
             }
         }
